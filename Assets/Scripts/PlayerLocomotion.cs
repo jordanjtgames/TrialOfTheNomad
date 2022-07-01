@@ -13,15 +13,85 @@ class CharacterState
 class IdleState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.attackState = true;
         pl.currentState = PlayerLocomotion.PlayerState.Idle;
 
         if (Inputs.inputDirRaw != Vector2.zero)
             return new RunningState();
         if (Inputs.attackPressed || Inputs.attackHeld) {
-            return new AttackingState();
+            //return new AttackingState();
         }
 
-        pl.ChangeArmsAnimationState("Idle", 0.2f, 0);
+        if(pl.atkSubstate >= 2) {
+            //Attack Animations
+        } else {
+            pl.ChangeArmsAnimationState("Idle", 0.2f, 0);
+        }
+
+        return this;
+    }
+}
+
+class FallingState : CharacterState
+{
+    override public CharacterState handelInput() {
+        pl.attackState = true;
+        return this;
+    }
+}
+
+class RingState : CharacterState
+{
+    override public CharacterState handelInput() {
+        pl.attackState = false;
+        return this;
+    }
+}
+
+class ChainClimbState : CharacterState
+{
+    override public CharacterState handelInput() {
+        pl.attackState = false;
+        return this;
+    }
+}
+
+class ChainSwingState : CharacterState
+{
+    override public CharacterState handelInput() {
+        pl.attackState = false;
+        return this;
+    }
+}
+
+class LedgeScaleState : CharacterState
+{
+    override public CharacterState handelInput() {
+        pl.attackState = false;
+        return this;
+    }
+}
+
+class PoleJumpState : CharacterState
+{
+    override public CharacterState handelInput() {
+        pl.attackState = true;
+        return this;
+    }
+}
+
+class RopeBalanceState : CharacterState
+{
+    override public CharacterState handelInput() {
+        pl.attackState = true;
+        return this;
+    }
+}
+
+class WallrunState : CharacterState
+{
+    override public CharacterState handelInput() {
+        pl.attackState = true;
         return this;
     }
 }
@@ -29,14 +99,22 @@ class IdleState : CharacterState
 class RunningState : CharacterState
 {
     override public CharacterState handelInput() {
-        if (Inputs.sprintHeld) {
-            pl.currentState = PlayerLocomotion.PlayerState.Sprinting;
-            pl.ChangeArmsAnimationState("Sprint", 0.2f, 0);
+        pl.attackState = true;
 
+        if (pl.atkSubstate >= 2) {
+            //Attack Animations
         } else {
-            pl.ChangeArmsAnimationState("Walk", 0.2f, 0);
-            pl.currentState = PlayerLocomotion.PlayerState.Running;
+            if (Inputs.sprintHeld) {
+                pl.currentState = PlayerLocomotion.PlayerState.Sprinting;
+                pl.ChangeArmsAnimationState("Sprint", 0.2f, 0);
+
+            } else {
+                pl.ChangeArmsAnimationState("Walk", 0.2f, 0);
+                pl.currentState = PlayerLocomotion.PlayerState.Running;
+            }
         }
+
+        
         //if (Keyboard.current.gKey.wasPressedThisFrame) {
         //    return new IdleState();
         //}
@@ -46,10 +124,10 @@ class RunningState : CharacterState
             return new IdleState();
         if (Inputs.attackPressed || Inputs.attackHeld) {
             //Debug.LogError("ddd");
-            return new AttackingState();
+            //return new AttackingState();
         }
         if (Inputs.blockPressed || Inputs.blockHeld) {
-            return new BlockingState();
+            //return new BlockingState();
         }
         if (Inputs.slidePressed) {
             //Debug.LogError("ddd");
@@ -308,6 +386,7 @@ class SlidingState : CharacterState
     float slideTime = 10f;
     
     override public CharacterState handelInput() {
+        pl.attackState = true;
         pl.currentState = PlayerLocomotion.PlayerState.Sliding;
         pl.gravityVector = new Vector3(0,-9.8f,0);
         //pl.gravityVector = new Vector3(0,0,0);
@@ -479,6 +558,36 @@ public class PlayerLocomotion : MonoBehaviour
     public Transform TK_VFX;
     public bool P_hasReleaseAttack;
 
+    public bool attackState = false;
+    public int atkSubstate = 0; //0 = Deactivated, 1 = Activated, 2 = Attacking, 3 = Magic,
+
+    float attackChargeTime = 0;
+    float attackReleaseTime = 0;
+    bool isChargingAttack = false;
+    bool isReleasingAttack = false;
+    float minChargeTime = 0.25f;
+    float minReleaseTime = 0.8f;
+    bool releaseAction = false;
+    float currentReleaseActionTime = 0;
+    public float releaseActionTime = 0.05f;
+
+    float lastAttackDelay = 0;
+    bool hasAltSwing = true;
+    bool isAltSwing = true;
+    bool needsToAltSwing = false;
+    float maxAltSwingTime = 1f;
+
+    float magicChargeTime = 0;
+    float magicReleaseTime = 0;
+    bool isChargingMagic = false;
+    bool isReleasingMagic = false;
+    float minMagicChargeTime = 0.75f;
+    float minMagicReleaseTime = 0.55f;
+    bool releaseMagicAction = false;
+    float currentReleaseMagicActionTime = 0;
+    public float releaseMagicActionTime = 0.05f;
+
+    //public Transform blinkVFXPos;
     void Start()
     {
         state = new CharacterState();
@@ -515,6 +624,153 @@ public class PlayerLocomotion : MonoBehaviour
             playerSpd = Vector3.zero;
         cc.Move((cc.transform.TransformDirection(new Vector3(Inputs.inputDirSmoothed.x * playerSpd.x, 0, Inputs.inputDirSmoothed.y * playerSpd.y)) + slideVector + gravityVector) * Time.deltaTime);
 
+        if(lastAttackDelay >= maxAltSwingTime) {
+            isAltSwing = false;
+        } else if(!isReleasingAttack) {
+            lastAttackDelay += Time.deltaTime;
+        }
+
+        if (attackState) {
+            //Attacking
+            if ((Inputs.attackHeld || Inputs.attackPressed) && atkSubstate <= 1) {
+                isChargingAttack = true;
+                atkSubstate = 2;
+            }
+
+            if(atkSubstate == 2) {
+                //needsToAltSwing = false;
+            }
+
+            if ((!Inputs.attackHeld || Inputs.attackReleased) && isChargingAttack) {
+                //Debug.Log("REL");
+                if (isReleasingAttack && lastAttackDelay <= maxAltSwingTime) {
+                    needsToAltSwing = true;
+                }
+
+                isReleasingAttack = true;
+            }
+
+            //Magic
+            if ((Inputs.blockHeld || Inputs.blockPressed) && atkSubstate <= 1) {
+                isChargingMagic = true;
+                atkSubstate = 3;
+            }
+
+            if ((!Inputs.blockHeld || Inputs.blockReleased) && isChargingMagic) {
+                //Debug.Log("REL");
+                isReleasingMagic = true;
+            }
+
+
+            if (isChargingAttack) {
+                currentState = PlayerState.Attacking;
+                attackChargeTime += Time.deltaTime;
+                if (attackChargeTime >= minChargeTime) {
+                    if (isReleasingAttack) {
+                        attackReleaseTime += Time.deltaTime;
+                        currentReleaseActionTime += Time.deltaTime;
+                        if(isAltSwing)
+                            ChangeArmsAnimationState("AttackReleaseAlt", 0.02f, 0);//AttackRelease
+                        else
+                            ChangeArmsAnimationState("AttackRelease", 0.02f, 0);//AttackRelease
+
+
+                        if (releaseAction && currentReleaseActionTime >= releaseActionTime) {
+                            
+                            //Attack Stuff
+
+                            RaycastHit[] allHits = Physics.SphereCastAll(cam.transform.position, 0.5f, cam.transform.TransformDirection(Vector3.forward), 5f);
+
+                            foreach (RaycastHit hit in allHits) {
+                                //Debug.Log(hit.collider.gameObject.name);
+                                hit.collider.SendMessage("OnAttackHit", SendMessageOptions.DontRequireReceiver);
+                            }
+
+                            releaseAction = false;
+                            currentReleaseActionTime = 0f;
+                        }
+
+                        if (attackReleaseTime >= minReleaseTime) {
+                            lastAttackDelay = 0f;
+                            isChargingAttack = false;
+                            isReleasingAttack = false;
+                            attackChargeTime = 0;
+                            attackReleaseTime = 0;
+                            releaseAction = true;
+                            atkSubstate = 1;
+                            isAltSwing = !isAltSwing;
+                        }
+                    } else {
+                        if(isAltSwing)
+                            ChangeArmsAnimationState("AttackChargeAlt", 0.02f, 0);
+                        else
+                            ChangeArmsAnimationState("AttackCharge", 0.02f, 0);
+                    }
+                } else {
+                    if (isAltSwing)
+                        ChangeArmsAnimationState("AttackChargeAlt", 0.02f, 0);
+                    else
+                        ChangeArmsAnimationState("AttackCharge", 0.02f, 0);
+                }
+            } else if(isChargingMagic) {
+                currentState = PlayerState.Blocking;
+                magicChargeTime += Time.deltaTime;
+                if (magicChargeTime >= minMagicChargeTime) {
+                    if (isReleasingMagic) {
+                        magicReleaseTime += Time.deltaTime;
+                        currentReleaseMagicActionTime += Time.deltaTime;
+                        ChangeArmsAnimationState("MagicRelease_1", 0.02f, 1);//AttackRelease
+
+
+                        if (releaseMagicAction && currentReleaseMagicActionTime >= releaseMagicActionTime) {
+
+                            //Magic Block Stuff
+
+                            
+
+                            releaseMagicAction = false;
+                            currentReleaseMagicActionTime = 0f;
+                        }
+
+                        if (magicReleaseTime >= minMagicReleaseTime) {
+                            isChargingMagic = false;
+                            isReleasingMagic = false;
+                            magicChargeTime = 0;
+                            magicReleaseTime = 0;
+                            releaseMagicAction = true;
+                            atkSubstate = 1;
+                            ChangeArmsAnimationState("LeftHandEmpty", 0.2f, 1);
+                        }
+                    } else {
+                        ChangeArmsAnimationState("MagicCharge_1", 0.2f, 1);
+                    }
+                } else {
+                    ChangeArmsAnimationState("MagicCharge_1", 0.2f, 1);
+                }
+            }
+            
+
+            
+
+
+            //ChangeArmsAnimationState("AttackRelease", 0.02f, 0);
+        } else {
+            isChargingAttack = false;
+            isReleasingAttack = false;
+            attackChargeTime = 0;
+            attackReleaseTime = 0;
+            releaseAction = false;
+            currentReleaseActionTime = 0f;
+
+            isChargingMagic = false;
+            isReleasingMagic = false;
+            magicChargeTime = 0;
+            magicReleaseTime = 0;
+            releaseMagicAction = false;
+            currentReleaseMagicActionTime = 0f;
+
+            atkSubstate = 0;
+        }
 
         if (Keyboard.current.hKey.wasPressedThisFrame)
             CamShake.instance.Shake(2);

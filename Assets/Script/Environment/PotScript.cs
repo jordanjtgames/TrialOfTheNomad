@@ -178,6 +178,8 @@ public class PotScript : MonoBehaviour
             CombatMovement.isKicking = false;
     }
 
+   
+
     private void OnCollisionEnter(Collision col)
     {
         if(t > 0.2f) {

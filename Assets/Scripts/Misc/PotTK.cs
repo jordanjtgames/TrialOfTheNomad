@@ -31,4 +31,9 @@ public class PotTK : MonoBehaviour
         transform.parent.GetComponent<PotScript>().BreakPot(0, transform.position);
         Destroy(g);
     }
+    public void OnAttackHit() {
+        Debug.Log("SwordHit");
+        //transform.parent.GetComponent<PotScript>().projectileBreak = true;
+        transform.parent.GetComponent<PotScript>().BreakPot(0, transform.position);
+    }
 }

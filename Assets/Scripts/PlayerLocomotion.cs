@@ -10,7 +10,7 @@ class CharacterState
         return this;
     }
 }
-class IdleState : CharacterState
+class WalkState : CharacterState
 {
     override public CharacterState handelInput() {
         pl.attackState = true;
@@ -21,6 +21,14 @@ class IdleState : CharacterState
         if (Inputs.attackPressed || Inputs.attackHeld) {
             //return new AttackingState();
         }
+        if (Inputs.jumpPressed) {
+            pl.hasJumped = true;
+            pl.extraVel.y = pl.jumpPower;
+            pl.jumpDelay = 0.3f;
+            return new FallingState();
+        }
+
+
 
         if(pl.atkSubstate >= 2) {
             //Attack Animations
@@ -36,6 +44,19 @@ class FallingState : CharacterState
 {
     override public CharacterState handelInput() {
         pl.attackState = true;
+
+        if (pl.hasJumped && pl.cc.isGrounded && pl.jumpDelay <= 0f) {
+            pl.hasJumped = false;
+            return new WalkState();
+        }
+
+
+        if (pl.atkSubstate >= 2) {
+            //Attack Animations
+        } else {
+            pl.ChangeArmsAnimationState("Fall", 0.2f, 0);
+        }
+
         return this;
     }
 }
@@ -121,7 +142,7 @@ class RunningState : CharacterState
         //PlayerLocomotion.cc.Move(new Vector3(Inputs.inputDirRaw.x,0, Inputs.inputDirRaw.y));
 
         if (Inputs.inputDirRaw == Vector2.zero)
-            return new IdleState();
+            return new WalkState();
         if (Inputs.attackPressed || Inputs.attackHeld) {
             //Debug.LogError("ddd");
             //return new AttackingState();
@@ -443,7 +464,7 @@ class SlidingState : CharacterState
             pl.armsAnim.speed = 1f;
             pl.handAnim.speed = 1f;
             pl.slideVector = Vector3.zero;
-            pl.gravityVector = new Vector3(0, -9.8f, 0);
+            pl.gravityVector = new Vector3(0, pl.gravity, 0);
             pl.slideSpeed = 1000f;
             return new RunningState();
         }
@@ -475,12 +496,17 @@ public class PlayerLocomotion : MonoBehaviour
     public float forwardSpeed = 10;
     public float sidewaysSpeed = 8;
     public float backwardSpeed = 6;
+    public float gravity = -9.81f;
+    public float jumpPower = 30f;
+    private float currentFallSpeed = 0f;
+    public float maxFallSpeed = -20f;
 
     
 
 
     [Header("Misc Variables")]
     public Camera cam;
+    public UIManager uiMan;
     public List<Transform> tilts;
     public Transform tiltHolder;
     public Transform tiltLR;
@@ -562,9 +588,9 @@ public class PlayerLocomotion : MonoBehaviour
     public int atkSubstate = 0; //0 = Deactivated, 1 = Activated, 2 = Attacking, 3 = Magic,
 
     float attackChargeTime = 0;
-    float attackReleaseTime = 0;
-    bool isChargingAttack = false;
-    bool isReleasingAttack = false;
+    public float attackReleaseTime = 0;
+    public bool isChargingAttack = false;
+    public bool isReleasingAttack = false;
     float minChargeTime = 0.25f;
     float minReleaseTime = 0.8f;
     bool releaseAction = false;
@@ -587,12 +613,40 @@ public class PlayerLocomotion : MonoBehaviour
     float currentReleaseMagicActionTime = 0;
     public float releaseMagicActionTime = 0.05f;
 
+    float interactDelay = 0f;
+
+    public bool hasJumped = false;
+    public float jumpDelay = 0f;
+    public Vector3 extraVel;
+
+    //Weapon Details
+
+    public int damage = 10;
+    public float critChance = 0.2f;
+    public int critDamage = 20;
+    public float weaponWalkMod = 1f;
+    public float weaponSprintMod = 1f;
+    public float chargeSpeed = 1f;
+    public float releaseSpeed = 1f;
+
+    public Transform oneHanded_Pos;
+    public Transform twoHanded_Pos;
+    public Transform bow_Pos;
+    public Transform shield_Pos;
+
+    public Transform displayArrow;
+
     //public Transform blinkVFXPos;
+
+
+
     void Start()
     {
         state = new CharacterState();
         //state = GetComponent<CharacterState>();
-        state = new IdleState();
+        state = new WalkState();
+
+        gravityVector = new Vector3(0, gravity, 0);
 
         tilts[0].localEulerAngles = new Vector3(0, 0, 15) * tiltAmount;
         tilts[1].localEulerAngles = new Vector3(0, 0, -15) * tiltAmount;
@@ -622,12 +676,74 @@ public class PlayerLocomotion : MonoBehaviour
         playerSpd = new Vector3(sidewaysSpeed,Inputs.inputDirSmoothed.y >= 0 ? forwardSpeed : backwardSpeed,1);
         if (currentState == PlayerState.Sliding)
             playerSpd = Vector3.zero;
-        cc.Move((cc.transform.TransformDirection(new Vector3(Inputs.inputDirSmoothed.x * playerSpd.x, 0, Inputs.inputDirSmoothed.y * playerSpd.y)) + slideVector + gravityVector) * Time.deltaTime);
+
+        if (jumpDelay > 0f)
+            jumpDelay -= Time.deltaTime;
+        else
+            jumpDelay = 0f;
+
+        if (cc.isGrounded && !hasJumped) {
+            extraVel.y = gravity;
+        } else {
+            if (extraVel.y > maxFallSpeed) {
+                extraVel.y += Time.deltaTime * gravity;
+            }
+        }
+        
+
+        Vector3 finalVel = extraVel;
+        cc.Move((cc.transform.TransformDirection(new Vector3(Inputs.inputDirSmoothed.x * playerSpd.x, 0, Inputs.inputDirSmoothed.y * playerSpd.y)) + slideVector + finalVel) * Time.deltaTime);
+
+        //Interact
+        RaycastHit iHit;
+
+        if (Physics.Raycast(cam.transform.position, cam.transform.TransformDirection(Vector3.forward), out iHit, 3f)) {
+            if (iHit.collider.GetComponent<WeaponPickup>() != null) {
+                uiMan.currentHoverItem = iHit.collider.GetComponent<WeaponPickup>();
+                switch (uiMan.currentHoverItem.myRarity) {
+                    case WeaponPickup.Rarity.Common:
+                        Color newBGcol_Common = WorldManager.rarity[0] * 0f;
+                        uiMan.weaponNameBG.color = new Color(newBGcol_Common.r, newBGcol_Common.g, newBGcol_Common.b, uiMan.weaponNameBG.color.a);
+                        uiMan.weaponStatsBG.color = new Color(newBGcol_Common.r * 0.5f, newBGcol_Common.g * 0.5f, newBGcol_Common.b * 0.5f, uiMan.weaponStatsBG.color.a);
+                        break;
+                    case WeaponPickup.Rarity.Uncommon:
+                        Color newBGcol_Uncommon = WorldManager.rarity[1] * 0.01f;
+                        uiMan.weaponNameBG.color = new Color(newBGcol_Uncommon.r, newBGcol_Uncommon.g, newBGcol_Uncommon.b, uiMan.weaponNameBG.color.a);
+                        uiMan.weaponStatsBG.color = new Color(newBGcol_Uncommon.r * 0f, newBGcol_Uncommon.g * 0f, newBGcol_Uncommon.b * 0f, uiMan.weaponStatsBG.color.a);
+                        break;
+                    case WeaponPickup.Rarity.Rare:
+                        Color newBGcol_Rare = WorldManager.rarity[2] * 0.02f;
+                        uiMan.weaponNameBG.color = new Color(newBGcol_Rare.r, newBGcol_Rare.g, newBGcol_Rare.b, uiMan.weaponNameBG.color.a);
+                        uiMan.weaponStatsBG.color = new Color(newBGcol_Rare.r * 0f, newBGcol_Rare.g * 0f, newBGcol_Rare.b * 0f, uiMan.weaponStatsBG.color.a);
+                        break;
+                    case WeaponPickup.Rarity.Epic:
+                        Color newBGcol_Epic = WorldManager.rarity[3] * 0.02f;
+                        uiMan.weaponNameBG.color = new Color(newBGcol_Epic.r, newBGcol_Epic.g, newBGcol_Epic.b, uiMan.weaponNameBG.color.a);
+                        uiMan.weaponStatsBG.color = new Color(newBGcol_Epic.r * 0f, newBGcol_Epic.g * 0f, newBGcol_Epic.b * 0f, uiMan.weaponStatsBG.color.a);
+                        break;
+                    case WeaponPickup.Rarity.Legendary:
+                        Color newBGcol_Legendary = WorldManager.rarity[4] * 0.025f;
+                        uiMan.weaponNameBG.color = new Color(newBGcol_Legendary.r, newBGcol_Legendary.g, newBGcol_Legendary.b, uiMan.weaponNameBG.color.a);
+                        uiMan.weaponStatsBG.color = new Color(newBGcol_Legendary.r * 0f, newBGcol_Legendary.g * 0f, newBGcol_Legendary.b * 0f, uiMan.weaponStatsBG.color.a);
+                        break;
+                }
+
+
+            }
+
+            if (Inputs.interactPressed && interactDelay <= 0) {
+                interactDelay = 0.25f;
+            }
+        }
+
+        if (interactDelay > 0)
+            interactDelay -= Time.deltaTime;
+        
 
         if(lastAttackDelay >= maxAltSwingTime) {
             isAltSwing = false;
         } else if(!isReleasingAttack) {
-            lastAttackDelay += Time.deltaTime;
+            lastAttackDelay += Time.deltaTime * (isChargingAttack ? 0f : 1f);
         }
 
         if (attackState) {
@@ -661,10 +777,16 @@ public class PlayerLocomotion : MonoBehaviour
                 isReleasingMagic = true;
             }
 
+            if (!hasAltSwing) {
+                isAltSwing = false;
+            }
 
             if (isChargingAttack) {
                 currentState = PlayerState.Attacking;
                 attackChargeTime += Time.deltaTime;
+                if (attackReleaseTime == 0) {
+                    AttackChargeUpdate();
+                }
                 if (attackChargeTime >= minChargeTime) {
                     if (isReleasingAttack) {
                         attackReleaseTime += Time.deltaTime;
@@ -677,7 +799,7 @@ public class PlayerLocomotion : MonoBehaviour
 
                         if (releaseAction && currentReleaseActionTime >= releaseActionTime) {
                             
-                            //Attack Stuff
+                            //Attack Stuff ========================================================================================================================
 
                             RaycastHit[] allHits = Physics.SphereCastAll(cam.transform.position, 0.5f, cam.transform.TransformDirection(Vector3.forward), 5f);
 
@@ -685,6 +807,24 @@ public class PlayerLocomotion : MonoBehaviour
                                 //Debug.Log(hit.collider.gameObject.name);
                                 hit.collider.SendMessage("OnAttackHit", SendMessageOptions.DontRequireReceiver);
                             }
+
+                            if(currentWeapon == Holding.Shortsword) {
+
+                            }
+                            if (currentWeapon == Holding.Broadsword) {
+
+                            }
+                            if (currentWeapon == Holding.Shield) {
+
+                            }
+                            if (currentWeapon == Holding.Bow) {
+                                GameObject loadedArrow = Resources.Load("Arrow_Projectile") as GameObject;
+                                GameObject newArrow = Instantiate(loadedArrow, displayArrow.position, displayArrow.rotation);
+                                Vector3 arrowVel = ((cam.transform.position + cam.transform.TransformDirection(Vector3.forward * 20f)) - displayArrow.position).normalized * 47f;
+                                newArrow.GetComponent<ArrowProjectile>().SetArrowVel(arrowVel);
+                                //Debug.Log("ArrowShoot");
+                            }
+
 
                             releaseAction = false;
                             currentReleaseActionTime = 0f;
@@ -699,6 +839,7 @@ public class PlayerLocomotion : MonoBehaviour
                             releaseAction = true;
                             atkSubstate = 1;
                             isAltSwing = !isAltSwing;
+                            needsToAltSwing = false;
                         }
                     } else {
                         if(isAltSwing)
@@ -719,14 +860,26 @@ public class PlayerLocomotion : MonoBehaviour
                     if (isReleasingMagic) {
                         magicReleaseTime += Time.deltaTime;
                         currentReleaseMagicActionTime += Time.deltaTime;
-                        ChangeArmsAnimationState("MagicRelease_1", 0.02f, 1);//AttackRelease
-
+                        //Magic Block Release
+                        //ChangeArmsAnimationState("MagicRelease_1", 0.02f, 1);
+                        ChangeArmsAnimationState("BlockCharge", 0.075f, 0);
 
                         if (releaseMagicAction && currentReleaseMagicActionTime >= releaseMagicActionTime) {
 
-                            //Magic Block Stuff
+                            //Magic Block Stuff ========================================================================================================================
 
-                            
+                            if (currentWeapon == Holding.Shortsword) {
+
+                            }
+                            if (currentWeapon == Holding.Broadsword) {
+
+                            }
+                            if (currentWeapon == Holding.Shield) {
+
+                            }
+                            if (currentWeapon == Holding.Bow) {
+
+                            }
 
                             releaseMagicAction = false;
                             currentReleaseMagicActionTime = 0f;
@@ -742,10 +895,12 @@ public class PlayerLocomotion : MonoBehaviour
                             ChangeArmsAnimationState("LeftHandEmpty", 0.2f, 1);
                         }
                     } else {
-                        ChangeArmsAnimationState("MagicCharge_1", 0.2f, 1);
+                        //ChangeArmsAnimationState("MagicCharge_1", 0.2f, 1);
+                        ChangeArmsAnimationState("BlockCharge", 0.075f, 0);
                     }
                 } else {
-                    ChangeArmsAnimationState("MagicCharge_1", 0.2f, 1);
+                    //ChangeArmsAnimationState("MagicCharge_1", 0.2f, 1);
+                    ChangeArmsAnimationState("BlockCharge", 0.075f, 0);
                 }
             }
             
@@ -769,8 +924,12 @@ public class PlayerLocomotion : MonoBehaviour
             releaseMagicAction = false;
             currentReleaseMagicActionTime = 0f;
 
+            BowString.bowDrawn = false;
+
             atkSubstate = 0;
         }
+
+        CamShake.instance.SetTargetFOV(BowString.bowDrawn ? 80f : 75f);
 
         if (Keyboard.current.hKey.wasPressedThisFrame)
             CamShake.instance.Shake(2);
@@ -816,15 +975,21 @@ public class PlayerLocomotion : MonoBehaviour
         armsConceal.localPosition = new Vector3(0, weaponSwitchCurve.Evaluate(weaponSwitchTime) * -1, 0);
         if(weaponSwitchTime <= 0.5f) {
             currentWeapon = newWeapon;
+
             shortswords.gameObject.SetActive(currentWeapon == Holding.Shortsword || currentWeapon == Holding.Shield);
             broadswords.gameObject.SetActive(currentWeapon == Holding.Broadsword);
             shields.gameObject.SetActive(currentWeapon == Holding.Shield);
             bows.gameObject.SetActive(currentWeapon == Holding.Bow);
+            
+            oneHanded_Pos.gameObject.SetActive(currentWeapon == Holding.Shortsword || currentWeapon == Holding.Shield);
+            twoHanded_Pos.gameObject.SetActive(currentWeapon == Holding.Broadsword);
+            shield_Pos.gameObject.SetActive(currentWeapon == Holding.Shield);
+            bow_Pos.gameObject.SetActive(currentWeapon == Holding.Bow);
+            
             magic.gameObject.SetActive(magicID != 0);
             hasSwitchedWeapon = true;
         }
 
-        BowString.bowDrawn = Inputs.attackHeld;
 
 
         //slideVector = new Vector3(0, -9.8f, 0);
@@ -1014,7 +1179,30 @@ public class PlayerLocomotion : MonoBehaviour
 
         weaponSwitchTime = 1;
         newWeapon = newHolding;
-        
+        //Swap over weapon details, speed, dmg, time
+
+        armsAnim.SetFloat("ChargeSpeed", chargeSpeed);
+        armsAnim.SetFloat("ReleaseSpeed", releaseSpeed);
+        handAnim.SetFloat("ChargeSpeed", chargeSpeed);
+        handAnim.SetFloat("ReleaseSpeed", releaseSpeed);
+
+        switch (newHolding) {
+            case Holding.Shortsword:
+                hasAltSwing = true;
+                break;
+            case Holding.Broadsword:
+                hasAltSwing = false;
+                break;
+            case Holding.Shield:
+                hasAltSwing = true;
+                break;
+            case Holding.Bow:
+                hasAltSwing = false;
+                break;
+            default:
+                break;
+        }
+
     }
 
     public void ChangeArmsAnimationState(string newState, float transitionTime, int layer) {
@@ -1097,6 +1285,21 @@ public class PlayerLocomotion : MonoBehaviour
 
     public void TouchPad() {
         //Debug.LogError("Touchpad");
+    }
+
+    public void AttackChargeUpdate() {
+        if (currentWeapon == Holding.Shortsword) {
+
+        }
+        if (currentWeapon == Holding.Broadsword) {
+
+        }
+        if (currentWeapon == Holding.Shield) {
+
+        }
+        if (currentWeapon == Holding.Bow) {
+            BowString.bowDrawn = Inputs.attackHeld;
+        }
     }
 }
 

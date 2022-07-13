@@ -327,7 +327,7 @@ Material:
     - _Opacity: 1
     - _OpaqueCullMode: 2
     - _OutlineExtrudeMethod: 0
-    - _OutlineWidth: 0.11
+    - _OutlineWidth: 0.0011
     - _OutlineWidthAffectedByViewDistance: 0
     - _OutlineZPostionInCamera: 0
     - _OverallShadowColorPower: 1
@@ -362,8 +362,8 @@ Material:
     - _STIL: 0
     - _Saturation: 1
     - _SelfLitHighContrast: 1
-    - _SelfLitIntensity: 0
-    - _SelfLitPower: 2
+    - _SelfLitIntensity: 0.36
+    - _SelfLitPower: 91.64
     - _SelfShadowAffectedByLightShadowStrength: 0
     - _SelfShadowHardness: 1
     - _SelfShadowRealTimeShadowColorPower: 1

@@ -6,7 +6,7 @@ using UnityEngine.VFX;
 public class OrbConsumables : MonoBehaviour
 {
     public VisualEffect OrbVFX;
-    float selfDestructTime = 0.02f;
+    float selfDestructTime = 0.5f;//0.02f
     bool selfDestruct = false;
     Transform playerTransform;
     public AnimationCurve attractionOverDistance;
@@ -33,8 +33,13 @@ public class OrbConsumables : MonoBehaviour
             }
         }
 
-        if (selfDestruct)
+        if (selfDestruct) {
             selfDestructTime -= Time.unscaledDeltaTime;
+
+            OrbVFX.SetFloat("Alpha", Mathf.Lerp(OrbVFX.GetFloat("Alpha"), 0f, Time.deltaTime * 16f));
+            OrbVFX.SetFloat("SizeMod", Mathf.Lerp(OrbVFX.GetFloat("SizeMod"), 0f, Time.deltaTime * 16f));
+
+        }
         if (selfDestructTime <= 0) {
             if(GameObject.Find("Player"))
                 GameObject.Find("_MyPlayer").transform.Find("Player").SendMessage("StartGlow", new Color(orbID == 1 ? 1 : 0, orbID == 2 ? 1 : 0, orbID == 3 ? 1 : 0), SendMessageOptions.DontRequireReceiver);

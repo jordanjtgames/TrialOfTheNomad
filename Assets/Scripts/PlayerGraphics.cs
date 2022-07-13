@@ -49,6 +49,10 @@ public class PlayerGraphics : MonoBehaviour
     public static Vector3 blinkTargetPos;
     bool hasResetBlinkVFX = false;
 
+    public Transform currentArrow;
+    public Transform bowArrowPos;
+    public Transform handArrowPos;
+
     void Start()
     {
         pl = GetComponent<PlayerLocomotion>();
@@ -172,6 +176,29 @@ public class PlayerGraphics : MonoBehaviour
             blinkHead.SetFloat("Displace", Mathf.Lerp(blinkHead.GetFloat("Displace"), 0f, Time.deltaTime * 24f));
             blinkHead.transform.localScale = Vector3.Lerp(blinkHead.transform.localScale, new Vector3(5, 1, 5), Time.deltaTime * 42f);
             hasResetBlinkVFX = false;
+        }
+
+        if (currentArrow != null) {
+            if (pl.currentWeapon == PlayerLocomotion.Holding.Bow) {
+                currentArrow.position = (bowArrowPos.position + handArrowPos.position) / 2f;
+                currentArrow.rotation = bowArrowPos.rotation;
+                currentArrow.parent = Camera.main.transform;
+
+            } else {
+                
+            }
+
+            bool hasntShotCurrentArrow = pl.currentWeapon == PlayerLocomotion.Holding.Bow && pl.attackReleaseTime == 0;
+
+            currentArrow.GetChild(0).GetChild(0).GetComponent<MeshRenderer>().enabled = hasntShotCurrentArrow;
+
+            if (!hasntShotCurrentArrow)
+                currentArrow.GetChild(0).localPosition = new Vector3(0, 0, -0.25f);
+            if (pl.currentWeapon == PlayerLocomotion.Holding.Bow && pl.isChargingAttack && pl.attackReleaseTime == 0) {
+                currentArrow.GetChild(0).localPosition = Vector3.Lerp(currentArrow.GetChild(0).localPosition, new Vector3(0, 0, 0.15f), Time.deltaTime * 6f);
+            } else {
+                currentArrow.GetChild(0).localPosition = Vector3.Lerp(currentArrow.GetChild(0).localPosition, new Vector3(0, 0, 0f), Time.deltaTime * 6f);
+            }
         }
 
     }

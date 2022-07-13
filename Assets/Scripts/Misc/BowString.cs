@@ -44,9 +44,14 @@ public class BowString : MonoBehaviour
         bowL_Bone.position = bow_L.position;
         bowR_Bone.position = bow_R.position;
 
-        if(pl.P_hasReleaseAttack) //AttackingState.hasReleasedAttack
-            bowC_Bone.position = (bow_L.position + bow_R.position) / 2f;
-        else
+        if (pl.attackReleaseTime > 0) { //AttackingState.hasReleasedAttack
+            if(pl.attackReleaseTime < 0.03f) {
+                bowC_Bone.position = ((bow_L.position + bow_R.position) / 2f) + Camera.main.transform.TransformDirection(Vector3.forward * 0.142f);
+            } else {
+                bowC_Bone.position = Vector3.Lerp(bowC_Bone.position,(bow_L.position + bow_R.position) / 2f,Time.deltaTime * 25f);
+            }
+
+        } else
             bowC_Bone.position = bow_DrawPos.position;
 
         //bowPos.transform.localScale = Vector3.Lerp(bowPos.transform.localScale, 

@@ -30,6 +30,12 @@ public class UIManager : MonoBehaviour
 
     public Transform wheelArrow;
 
+    public Transform weaponHoverUI;
+    public WeaponPickup currentHoverItem;
+    public TextMeshProUGUI weaponName;
+    public RawImage weaponNameBG;
+    public RawImage weaponStatsBG;
+
     void Start()
     {
         float tiltAmount = 0.5f;
@@ -42,6 +48,20 @@ public class UIManager : MonoBehaviour
     void Update()
     {
         testWWSS.position = Camera.main.WorldToScreenPoint(testWWSS_Pos.position);
+        if (currentHoverItem != null) {
+
+            if (Vector3.Distance(weaponHoverUI.position, center.position) < 500 && Vector3.Distance(player.position, currentHoverItem.transform.position) < 12
+            && Vector3.Dot(player.TransformDirection(Vector3.forward), (currentHoverItem.transform.position - player.position)) > 0) {
+                weaponHoverUI.gameObject.SetActive(true);
+            } else {
+                weaponHoverUI.gameObject.SetActive(false);
+            }
+
+            weaponHoverUI.position = Camera.main.WorldToScreenPoint(currentHoverItem.transform.position) + new Vector3(0,-100f,0);
+            weaponName.text = currentHoverItem.weaponName + " [E]";
+        } else {
+            weaponHoverUI.gameObject.SetActive(false);
+        }
 
         if(Vector3.Distance(testWWSS.position, center.position) < 500 && Vector3.Distance(player.position, testWWSS_Pos.position) < 12
             && Vector3.Dot(player.TransformDirection(Vector3.forward), (testWWSS_Pos.position - player.position)) > 0) {

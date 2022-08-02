@@ -382,7 +382,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 953beb541740ddc499d005ee80c9ff29, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  active: 0
+  active: 1
   m_AdvancedMode: 0
   quality:
     m_OverrideState: 1
@@ -401,7 +401,7 @@ MonoBehaviour:
     showEyeDropper: 1
   tint:
     m_OverrideState: 1
-    m_Value: {r: 4, g: 4, b: 4, a: 1}
+    m_Value: {r: 0.7994717, g: 1.6967987, b: 1.8679246, a: 1}
     hdr: 1
     showAlpha: 0
     showEyeDropper: 1
@@ -424,20 +424,20 @@ MonoBehaviour:
     min: 0
   baseHeight:
     m_OverrideState: 1
-    m_Value: -14.1
+    m_Value: -21.2
   maximumHeight:
     m_OverrideState: 1
-    m_Value: 50
+    m_Value: 121
   meanFreePath:
     m_OverrideState: 1
-    m_Value: 27
+    m_Value: 112.4
     min: 1
   enableVolumetricFog:
     m_OverrideState: 1
     m_Value: 1
   albedo:
     m_OverrideState: 1
-    m_Value: {r: 0.87375396, g: 0.9675882, b: 0.990566, a: 1}
+    m_Value: {r: 1, g: 0.86654526, b: 0.80784315, a: 1}
     hdr: 0
     showAlpha: 1
     showEyeDropper: 1

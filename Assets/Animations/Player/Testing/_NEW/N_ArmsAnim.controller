@@ -113,7 +113,7 @@ AnimatorState:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Idle Jump_SS
-  m_Speed: 1
+  m_Speed: 1.75
   m_CycleOffset: 0
   m_Transitions: []
   m_StateMachineBehaviours: []
@@ -264,7 +264,7 @@ AnimatorState:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: AttackSwingOverhead_SS
+  m_Name: AttackReleaseOverhead_SS
   m_Speed: 1
   m_CycleOffset: 0
   m_Transitions: []
@@ -422,13 +422,13 @@ AnimatorStateMachine:
     m_Position: {x: 40, y: 60, z: 0}
   - serializedVersion: 1
     m_State: {fileID: 2592603460192779216}
-    m_Position: {x: -240, y: 0, z: 0}
+    m_Position: {x: -240, y: 10, z: 0}
   - serializedVersion: 1
     m_State: {fileID: -8487768232625105662}
     m_Position: {x: -240, y: 60, z: 0}
   - serializedVersion: 1
     m_State: {fileID: -6251231510104718318}
-    m_Position: {x: -250, y: 440, z: 0}
+    m_Position: {x: -240, y: 440, z: 0}
   - serializedVersion: 1
     m_State: {fileID: 1961971938332531720}
     m_Position: {x: -240, y: 300, z: 0}
@@ -999,13 +999,13 @@ AnimatorController:
     m_DefaultFloat: 1
     m_DefaultInt: 0
     m_DefaultBool: 0
-    m_Controller: {fileID: 0}
+    m_Controller: {fileID: 9100000}
   - m_Name: ReleaseSpeed
     m_Type: 1
     m_DefaultFloat: 1
     m_DefaultInt: 0
     m_DefaultBool: 0
-    m_Controller: {fileID: 0}
+    m_Controller: {fileID: 9100000}
   m_AnimatorLayers:
   - serializedVersion: 5
     m_Name: Base Layer

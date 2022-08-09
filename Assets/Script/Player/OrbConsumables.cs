@@ -28,7 +28,13 @@ public class OrbConsumables : MonoBehaviour
 
         if (dist <= 10) {
             transform.position = Vector3.MoveTowards(transform.position, playerTransform.position - Vector3.up, Time.deltaTime * (attractionOverDistance.Evaluate(dist) * attractionMultiplier * wakeUpTime));
-            if (dist < 0.55f) {
+            if (dist < 0.55f && !selfDestruct) {
+                if (GameObject.Find("Player"))
+                    GameObject.Find("_MyPlayer").transform.Find("Player").SendMessage("StartGlow", new Color(orbID == 1 ? 1 : 0, orbID == 2 ? 1 : 0, orbID == 3 ? 1 : 0), SendMessageOptions.DontRequireReceiver);
+                if (GameObject.Find("PlayerController")) {
+                    Color sendColour = new Color(orbID == 1 ? 1 : 0, orbID == 2 ? 1 : 0, orbID == 3 ? 1 : 0);
+                    GameObject.Find("_MyPlayer").transform.Find("PlayerController").SendMessage("StartGlow", sendColour, SendMessageOptions.DontRequireReceiver);
+                }
                 selfDestruct = true;
             }
         }
@@ -41,8 +47,7 @@ public class OrbConsumables : MonoBehaviour
 
         }
         if (selfDestructTime <= 0) {
-            if(GameObject.Find("Player"))
-                GameObject.Find("_MyPlayer").transform.Find("Player").SendMessage("StartGlow", new Color(orbID == 1 ? 1 : 0, orbID == 2 ? 1 : 0, orbID == 3 ? 1 : 0), SendMessageOptions.DontRequireReceiver);
+            
             Destroy(transform.parent.gameObject);
         }
     }

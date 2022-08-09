@@ -188,10 +188,10 @@ public class PotScript : MonoBehaviour
             projectileBreak = true;
         }
 
-        Debug.LogError(70);
+        //Debug.LogError(70);
 
         if(basePot.GetComponent<Rigidbody>().velocity.magnitude > 10) {
-            BlockingState.forceLetGo = true;
+            PlayerLocomotion.TKCooldown = 0.3f;
             projectileBreak = true;
         }
     }

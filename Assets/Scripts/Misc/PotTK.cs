@@ -19,7 +19,7 @@ public class PotTK : MonoBehaviour
     private void OnCollisionEnter(Collision col) {
         
         if (GetComponent<Rigidbody>().velocity.magnitude > 1) {
-            BlockingState.forceLetGo = true;
+            PlayerLocomotion.TKCooldown = 0.3f;
             transform.parent.GetComponent<PotScript>().BreakPot(0,transform.position);
 
             //Debug.LogError(GetComponent<Rigidbody>().velocity.magnitude);
@@ -27,12 +27,12 @@ public class PotTK : MonoBehaviour
     }
 
     void RockHit(GameObject g) {
-        BlockingState.forceLetGo = true;
+        PlayerLocomotion.TKCooldown = 0.3f;
         transform.parent.GetComponent<PotScript>().BreakPot(0, transform.position);
         Destroy(g);
     }
     public void OnAttackHit() {
-        Debug.Log("SwordHit");
+        //Debug.Log("SwordHit");
         //transform.parent.GetComponent<PotScript>().projectileBreak = true;
         transform.parent.GetComponent<PotScript>().BreakPot(0, transform.position);
     }

@@ -24,8 +24,10 @@ public class WeaponPickup : MonoBehaviour
     public float range = 3f;
 
     public bool altSwing = true;
+    public bool overhead = true;
     public float cancelTime = 3f;
 
+    public bool isSpear = false;
     public float lungeChargeSpeed = 1f;
     public float minLungeChargeTime = 0.25f;
     public float lungeReleaseSpeed = 1f;

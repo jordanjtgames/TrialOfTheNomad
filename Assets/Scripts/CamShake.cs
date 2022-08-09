@@ -28,7 +28,8 @@ public class CamShake : MonoBehaviour
         instance = this;
     }
 
-    public void Shake(float intensity) {
+    public void Shake(float intensity, float newFadeTime) {
+        fadeTime = newFadeTime;
         shakeIntensity = startIntensity * intensity;
         shakeRotation = startRotationIntensity * intensity;
         t = 1;

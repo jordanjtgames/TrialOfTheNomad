@@ -197,7 +197,8 @@ public class CombatMovement : MonoBehaviour
     public static bool isKicking = false;
     float kickDelay = 0; //1
     bool hasKicked = false;
-    
+
+    public LayerMask wallrunMask;
 
     //--------------------------------------Input
 
@@ -548,7 +549,7 @@ public class CombatMovement : MonoBehaviour
         Vector3 R_Dir = wallrunCheck_R.TransformDirection(Vector3.forward);
         RaycastHit hit_L;
         RaycastHit hit_R;
-        if (Physics.Raycast(wallrunCheck_L.transform.position, L_Dir, out hit_L, wallrunDetectDist) && !cc.isGrounded && wallrunCooldown <= 0 && wallrunTimer < 2.5f) { //LEFT
+        if (Physics.Raycast(wallrunCheck_L.transform.position, L_Dir, out hit_L, wallrunDetectDist, wallrunMask) && !cc.isGrounded && wallrunCooldown <= 0 && wallrunTimer < 2.5f) { //LEFT
             wallrunCheckTime += Time.deltaTime;
             //Debug.LogError(983624);
             if (!isWallrunning && V > 0 && ((1==1 && wallrunCheckTime > 0.1f) || canChainWR) && wrID != 1) {
@@ -568,7 +569,7 @@ public class CombatMovement : MonoBehaviour
                 wallrunHolder.rotation = Quaternion.LookRotation(Quaternion.AngleAxis(-90, Vector3.up) * wallParallel, Vector3.up);
             }
         }
-        else if (Physics.Raycast(wallrunCheck_R.transform.position, R_Dir, out hit_R, wallrunDetectDist) && !cc.isGrounded && wallrunCooldown <= 0 && wallrunTimer < 2.5f) { //RIGHT
+        else if (Physics.Raycast(wallrunCheck_R.transform.position, R_Dir, out hit_R, wallrunDetectDist, wallrunMask) && !cc.isGrounded && wallrunCooldown <= 0 && wallrunTimer < 2.5f) { //RIGHT
             wallrunCheckTime += Time.deltaTime;
             //Debug.LogError(983624);
             if (!isWallrunning && V > 0 && ((1==1 && wallrunCheckTime > 0.1f) || canChainWR) && wrID != 2) {

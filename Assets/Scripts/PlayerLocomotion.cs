@@ -13,7 +13,9 @@ class CharacterState
 class WalkState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = true;
         pl.attackState = true;
+        pl.concealState = false;
         pl.currentState = PlayerLocomotion.PlayerState.Idle;
 
         
@@ -27,6 +29,8 @@ class WalkState : CharacterState
             pl.jumpDelay = 0.3f;
             if (Inputs.sprintHeld && Inputs.inputDirRaw.y > 0.1f)
                 pl.leap = true;
+            return new FallingState();
+        }else if (pl.airTime > 0.01f) {
             return new FallingState();
         }
 
@@ -56,9 +60,11 @@ class WalkState : CharacterState
 class FallingState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = true;
         pl.attackState = true;
+        pl.concealState = false;
 
-        if (pl.hasJumped && pl.cc.isGrounded && pl.jumpDelay <= 0f) {
+        if (pl.cc.isGrounded && pl.jumpDelay <= 0f) {
             pl.hasJumped = false;
             pl.leap = false;
             return new WalkState();
@@ -75,8 +81,21 @@ class FallingState : CharacterState
                     pl.ChangeArmsAnimationState("Idle Jump", 0.2f, 0);
             } else {
                 pl.ChangeArmsAnimationState("Fall", 0.2f, 0);
-
+                Debug.Log("fall");
             }
+        }
+
+        RaycastHit LG_FWD_Hit;
+        RaycastHit LG_TOP_Hit;
+        if(Physics.Raycast(pl.ledgeGrabFWD.position, pl.ledgeGrabFWD.forward, out LG_FWD_Hit, 1.5f) && pl.atkSubstate < 2) {
+            if (Physics.Raycast(pl.ledgeGrabTop.position, pl.ledgeGrabTop.forward, out LG_TOP_Hit, 1.5f)) {
+                pl.ledgeGrabHit = LG_TOP_Hit.point;
+                return new LedgeScaleState();
+            }
+        }
+
+        if (pl.ringTrigger) {
+            return new RingState();
         }
 
         return this;
@@ -86,7 +105,26 @@ class FallingState : CharacterState
 class RingState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = false;
         pl.attackState = false;
+        pl.concealState = true;
+
+        pl.hasJumped = false;
+        pl.extraVel = Vector3.zero;
+
+        pl.transform.position = Vector3.Lerp(pl.transform.position, pl.ringTrans.position, Time.deltaTime * 7f);
+
+        if (Inputs.jumpPressed) {
+            pl.ringTrigger = false;
+            pl.extraDampenVel = pl.transform.TransformDirection(new Vector3(0,2,0.4f) * 11f);
+            return new FallingState();
+        }
+        if (Inputs.crouchPressed) {
+            pl.ringTrigger = false;
+            pl.extraDampenVel = Vector3.zero;
+            return new FallingState();
+        }
+
         return this;
     }
 }
@@ -94,7 +132,9 @@ class RingState : CharacterState
 class ChainClimbState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = false;
         pl.attackState = false;
+        pl.concealState = true;
         return this;
     }
 }
@@ -102,15 +142,48 @@ class ChainClimbState : CharacterState
 class ChainSwingState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = false;
         pl.attackState = false;
+        pl.concealState = true;
         return this;
     }
 }
 
 class LedgeScaleState : CharacterState
 {
+    float scaleSpeed = 8.5f;
+    bool reachedHeight = false;
+    Vector3 dir = Vector3.zero;
+    float ledgeTime = 0f;
+
     override public CharacterState handelInput() {
+        pl.controlState = false;
         pl.attackState = false;
+        pl.concealState = true;
+
+        pl.hasJumped = false;
+        pl.extraVel = Vector3.zero;
+
+        if(dir == Vector3.zero) {
+            dir = (new Vector3(pl.ledgeGrabHit.x,0, pl.ledgeGrabHit.z) - new Vector3(pl.transform.position.x, 0, pl.transform.position.z)).normalized;
+        }
+
+        ledgeTime += Time.deltaTime;
+
+        if (reachedHeight || ledgeTime > 1.5f) {
+            pl.cc.Move(dir * Time.deltaTime * scaleSpeed);
+            Vector3 farPoint = pl.ledgeGrabHit + (dir * 5);
+            if (Vector3.Distance(pl.transform.position, farPoint) < Vector3.Distance(pl.ledgeGrabHit, farPoint) || ledgeTime > 1.5f) {
+                pl.ResetAttackBlockParams();
+                return new WalkState();
+            }
+        } else {
+            pl.cc.Move(Vector3.up * Time.deltaTime * scaleSpeed);
+            if(pl.transform.position.y > pl.ledgeGrabHit.y + 0.1f) {
+                reachedHeight = true;
+            }
+        }
+
         return this;
     }
 }
@@ -118,7 +191,9 @@ class LedgeScaleState : CharacterState
 class PoleJumpState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = false;
         pl.attackState = true;
+        pl.concealState = false;
         return this;
     }
 }
@@ -126,7 +201,9 @@ class PoleJumpState : CharacterState
 class RopeBalanceState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = false;
         pl.attackState = true;
+        pl.concealState = false;
         return this;
     }
 }
@@ -134,7 +211,9 @@ class RopeBalanceState : CharacterState
 class WallrunState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = false;
         pl.attackState = true;
+        pl.concealState = true;
         return this;
     }
 }
@@ -142,7 +221,9 @@ class WallrunState : CharacterState
 class BlinkState : CharacterState
 {
     override public CharacterState handelInput() {
+        pl.controlState = false;
         pl.attackState = false;
+        pl.concealState = false;
         return this;
     }
 }
@@ -563,6 +644,7 @@ public class PlayerLocomotion : MonoBehaviour
     public Vector3 playerSpd;
 
     public Transform armsConceal;
+    public Transform armsStateConceal;
 
     public Transform shortswords;
     public Transform broadswords;
@@ -570,7 +652,7 @@ public class PlayerLocomotion : MonoBehaviour
     public Transform bows;
     public Transform magic;
 
-    float airTime = 0;
+    public float airTime = 0;
 
     float weaponSwitchTime = 0;
     public AnimationCurve weaponSwitchCurve;
@@ -619,6 +701,8 @@ public class PlayerLocomotion : MonoBehaviour
     public bool P_hasReleaseAttack;
 
     public bool attackState = false;
+    public bool controlState = false;
+    public bool concealState = false;
     public int atkSubstate = 0; //0 = Deactivated, 1 = Activated, 2 = Attacking, 3 = Magic,
 
     float attackChargeTime = 0;
@@ -656,6 +740,7 @@ public class PlayerLocomotion : MonoBehaviour
     public bool leap = false;
     public float jumpDelay = 0f;
     public Vector3 extraVel;
+    public Vector3 extraDampenVel;
 
     bool needsToReleaseAttackBlock = false;
 
@@ -688,6 +773,13 @@ public class PlayerLocomotion : MonoBehaviour
     public static float TKpushDirLerp = 0;
     public float TKpushDirLerp_Anim = 0;
     public static float TKCooldown = 0;
+
+    public Transform ledgeGrabFWD;
+    public Transform ledgeGrabTop;
+    public Vector3 ledgeGrabHit;
+
+    public bool ringTrigger = false;
+    public Transform ringTrans;
 
     void Start()
     {
@@ -750,10 +842,20 @@ public class PlayerLocomotion : MonoBehaviour
                 extraVel.y += Time.deltaTime * (hasJumped ? gravity : gravity * 0.45f);
             }
         }
-        
 
-        Vector3 finalVel = extraVel;
-        cc.Move((cc.transform.TransformDirection(new Vector3(Inputs.inputDirSmoothed.x * playerSpd.x, 0, Inputs.inputDirSmoothed.y * playerSpd.y)) + slideVector + finalVel) * Time.deltaTime);
+        extraDampenVel = Vector3.Lerp(extraDampenVel, Vector3.zero, Time.deltaTime * 2.4f);
+
+        //Debug.Log(extraVel.y);
+        Vector3 finalVel = extraVel + extraDampenVel;
+        if (controlState) {
+            cc.Move((cc.transform.TransformDirection(new Vector3(Inputs.inputDirSmoothed.x * playerSpd.x, 0, Inputs.inputDirSmoothed.y * playerSpd.y)) + slideVector + finalVel) * Time.deltaTime);
+        } else {
+
+        }
+
+        if (cc.isGrounded) {
+            ringTrigger = false;
+        }
 
         //Interact
         RaycastHit iHit;
@@ -801,7 +903,7 @@ public class PlayerLocomotion : MonoBehaviour
             interactDelay -= Time.deltaTime;
         
 
-        if(lastAttackDelay >= maxAltSwingTime) {
+        if(lastAttackDelay >= maxAltSwingTime || isOverhead) {
             isAltSwing = false;
         } else if(!isReleasingAttack) {
             lastAttackDelay += Time.deltaTime * (isChargingAttack ? 0f : 1f);
@@ -831,7 +933,7 @@ public class PlayerLocomotion : MonoBehaviour
             if (isOverhead && airTime >= 0.6f) {
                 RaycastHit groundHit;
                 if(Physics.Raycast(transform.position,Vector3.down, out groundHit, 1f) && !isReleasingAttack && attackChargeTime >= minChargeTime) {
-                    //needsToAltSwing = false; //Needs to slam
+                    needsToAltSwing = false; //Needs to slam
                     isReleasingAttack = true;
                     needsToSlam = true;
                 }
@@ -877,7 +979,7 @@ public class PlayerLocomotion : MonoBehaviour
                 isOverhead = airTime > 0.05f;
             if (!isOverhead)
                 needsToSlam = false;
-
+            Debug.Log(releaseAction);
             if (isChargingAttack) {
                 currentState = PlayerState.Attacking;
                 attackChargeTime += Time.deltaTime;
@@ -893,9 +995,9 @@ public class PlayerLocomotion : MonoBehaviour
                         else
                             ChangeArmsAnimationState(isOverhead ? "AttackReleaseOverhead" : "AttackRelease", 0.02f, 0);//AttackRelease
 
-
+                        
                         if (releaseAction && currentReleaseActionTime >= releaseActionTime) {
-                            
+                            //Debug.LogError("Hit");
                             //Attack Stuff ========================================================================================================================
 
                             RaycastHit[] allHits = Physics.SphereCastAll(cam.transform.position, 0.5f, cam.transform.TransformDirection(Vector3.forward), 5f);
@@ -1179,6 +1281,10 @@ public class PlayerLocomotion : MonoBehaviour
             weaponSwitchTime = 0;
             hasSwitchedWeapon = false;
         }
+
+        armsStateConceal.localRotation = Quaternion.Lerp(armsStateConceal.localRotation, 
+            concealState ? armsStateConceal.parent.GetChild(2).localRotation : armsStateConceal.parent.GetChild(1).localRotation, Time.deltaTime * 12f);
+
         armsConceal.localEulerAngles = new Vector3(weaponSwitchCurve.Evaluate(weaponSwitchTime) * 50, 0, weaponSwitchCurve.Evaluate(weaponSwitchTime) * -25);
         armsConceal.localPosition = new Vector3(0, weaponSwitchCurve.Evaluate(weaponSwitchTime) * -1, 0);
         if(weaponSwitchTime <= 0.5f) {
@@ -1558,8 +1664,9 @@ public class PlayerLocomotion : MonoBehaviour
         isReleasingAttack = false;
         attackChargeTime = 0;
         attackReleaseTime = 0;
-        releaseAction = false;
+        releaseAction = true;//false
         currentReleaseActionTime = 0f;
+        //currentReleaseActionTime = 0.8f;
 
         isChargingMagic = false;
         isReleasingMagic = false;
@@ -1578,6 +1685,14 @@ public class PlayerLocomotion : MonoBehaviour
 
         TKCooldown = 0.3f;
         ChangeArmsAnimationState("LeftHandEmpty", 0.2f, 1);
+    }
+
+    private void OnTriggerEnter(Collider col) {
+        if(col.tag == "Ring") {
+            //Debug.LogError("Ring");
+            ringTrigger = true;
+            ringTrans = col.transform;
+        }
     }
 }
 

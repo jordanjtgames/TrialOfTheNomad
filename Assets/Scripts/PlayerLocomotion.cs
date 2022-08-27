@@ -606,6 +606,7 @@ public class PlayerLocomotion : MonoBehaviour
     public int magicID = 0; //0 = None, 1 = Blink
     public float forwardSpeed = 10;
     public float sprintMod = 1.35f;
+    public float crouchMod = 0.5f;
     public float sidewaysSpeed = 8;
     public float backwardSpeed = 6;
     public float gravity = -9.81f;
@@ -640,6 +641,7 @@ public class PlayerLocomotion : MonoBehaviour
     float lookTiltAmount = 0.1f;
     public Animator armsAnim;
     public Animator handAnim;
+    public Animator legsAnim;
 
     public Vector3 playerSpd;
 
@@ -653,6 +655,8 @@ public class PlayerLocomotion : MonoBehaviour
     public Transform magic;
 
     public float airTime = 0;
+
+    bool isCrouched = false;
 
     float weaponSwitchTime = 0;
     public AnimationCurve weaponSwitchCurve;
@@ -694,6 +698,7 @@ public class PlayerLocomotion : MonoBehaviour
     private string currentArmsState;
     private string currentArmsLeftHandState;
     private string currentArmsRightShoulderState;
+    private string currentLegsState;
 
     public AnimationCurve slideAccel;
 
@@ -703,7 +708,7 @@ public class PlayerLocomotion : MonoBehaviour
     public bool attackState = false;
     public bool controlState = false;
     public bool concealState = false;
-    public int atkSubstate = 0; //0 = Deactivated, 1 = Activated, 2 = Attacking, 3 = Magic,
+    public int atkSubstate = 0; //0 = Deactivated, 1 = Activated, 2 = Attacking, 3 = Magic, 4 = Kick
 
     float attackChargeTime = 0;
     public float attackReleaseTime = 0;
@@ -733,6 +738,12 @@ public class PlayerLocomotion : MonoBehaviour
     bool releaseMagicAction = false;
     float currentReleaseMagicActionTime = 0;
     public float releaseMagicActionTime = 0.05f;
+
+    bool isKicking = false;
+    float kickChargeTime = 0;
+    float kickMinChargeTime = 0.275f;
+    float kickReleaseTime = 0;
+    bool releasedKickAction = true;
 
     float interactDelay = 0f;
 
@@ -809,15 +820,21 @@ public class PlayerLocomotion : MonoBehaviour
         ChangeWeapon(currentWeapon);
     }
 
-    void Update()
-    {
+    void Update() {
         state.pl = this;
         state = state.handelInput();
 
         float movementSlopeAngle = Mathf.Asin(cc.velocity.normalized.y) * Mathf.Rad2Deg;
         float maxSpeed = cc.isGrounded ? slopeSpeedMultiplier.Evaluate(movementSlopeAngle) : 1f;
 
-        speedMod = Mathf.Lerp(speedMod, currentState == PlayerState.Sprinting ? sprintMod : 1f, Time.deltaTime * 6f);
+        float targetSpeedMod = 1f;
+        if (currentState == PlayerState.Sprinting)
+            targetSpeedMod = sprintMod;
+        else if(isCrouched)
+            targetSpeedMod = crouchMod;
+
+        speedMod = Mathf.Lerp(speedMod, targetSpeedMod, Time.deltaTime * 6f);
+        
         playerSpd = new Vector3(sidewaysSpeed,Inputs.inputDirSmoothed.y >= 0 ? forwardSpeed : backwardSpeed,1) * speedMod * maxSpeed;
         //playerSpd = new Vector3(playerSpd.x * maxSpeed, playerSpd.y,playerSpd.z * maxSpeed);
 
@@ -846,7 +863,8 @@ public class PlayerLocomotion : MonoBehaviour
         extraDampenVel = Vector3.Lerp(extraDampenVel, Vector3.zero, Time.deltaTime * 2.4f);
 
         //Debug.Log(extraVel.y);
-        Vector3 finalVel = extraVel + extraDampenVel;
+        Vector3 uncrouchPush = transform.TransformDirection(Vector3.forward * (1 - (cc.height-1))) * (!isCrouched && cc.height < 1.95f ? 1 : 0);
+        Vector3 finalVel = extraVel + extraDampenVel + uncrouchPush;
         if (controlState) {
             cc.Move((cc.transform.TransformDirection(new Vector3(Inputs.inputDirSmoothed.x * playerSpd.x, 0, Inputs.inputDirSmoothed.y * playerSpd.y)) + slideVector + finalVel) * Time.deltaTime);
         } else {
@@ -856,6 +874,14 @@ public class PlayerLocomotion : MonoBehaviour
         if (cc.isGrounded) {
             ringTrigger = false;
         }
+
+        isCrouched = Inputs.crouchHeld;
+        cc.height = Mathf.Lerp(cc.height, isCrouched ? 0.5f : 2f, Time.deltaTime * 6.3f);
+
+        bool halfConceal = isCrouched;
+        armsStateConceal.localPosition = Vector3.Lerp(armsStateConceal.localPosition,
+            halfConceal ? armsStateConceal.parent.GetChild(2).localPosition : armsStateConceal.parent.GetChild(1).localPosition, Time.deltaTime * 12f);
+
 
         //Interact
         RaycastHit iHit;
@@ -909,8 +935,14 @@ public class PlayerLocomotion : MonoBehaviour
             lastAttackDelay += Time.deltaTime * (isChargingAttack ? 0f : 1f);
         }
 
-        if (attackState) {
+        if (attackState && atkSubstate < 4) {
             //Attacking
+
+            if(Inputs.kickPressed && atkSubstate < 4 && !isKicking) {
+                isKicking = true;
+                atkSubstate = 4;
+            }
+
             if ((Inputs.attackHeld || Inputs.attackPressed) && atkSubstate <= 1 && !needsToReleaseAttackBlock) {
                 isChargingAttack = true;
                 atkSubstate = 2;
@@ -979,7 +1011,7 @@ public class PlayerLocomotion : MonoBehaviour
                 isOverhead = airTime > 0.05f;
             if (!isOverhead)
                 needsToSlam = false;
-            Debug.Log(releaseAction);
+            
             if (isChargingAttack) {
                 currentState = PlayerState.Attacking;
                 attackChargeTime += Time.deltaTime;
@@ -1210,15 +1242,46 @@ public class PlayerLocomotion : MonoBehaviour
                     }
                 }
             }
-            
-
-            
 
 
             //ChangeArmsAnimationState("AttackRelease", 0.02f, 0);
+        } else if(attackState && atkSubstate == 4) {
+            //Kicking
+            if(kickChargeTime < kickMinChargeTime)
+                kickChargeTime += Time.deltaTime;
+            if (isKicking) {
+                ChangeLegsAnimationState("KickHold", 0.2f);
+            } else if(!isKicking && kickChargeTime >= kickMinChargeTime) {
+                kickReleaseTime += Time.deltaTime;
+                ChangeLegsAnimationState("KickRelease", 0.02f);
+                if (releasedKickAction && kickReleaseTime > 0.1f) {
+
+                    RaycastHit[] allKickHits = Physics.SphereCastAll(cam.transform.position, 1.65f, cam.transform.TransformDirection(Vector3.forward), 1.3f);
+
+                    foreach (RaycastHit kickHit in allKickHits) {
+                        //Debug.Log(hit.collider.gameObject.name);
+                        kickHit.collider.SendMessage("OnAttackHit", SendMessageOptions.DontRequireReceiver);
+                    }
+                    CamShake.instance.Shake(0.03f, 0.037f);
+
+                    releasedKickAction = false;
+                }
+                if (kickReleaseTime >= 1.105f) {
+                    ResetAttackBlockParams();
+                }
+            }
+
+            if (!Inputs.kickHeld || (Inputs.inputDirRaw != Vector2.zero && cc.isGrounded)) { //RekeaseKick
+                isKicking = false;
+            }
+            if (Inputs.blockReleased) {
+                ResetAttackBlockParams();
+            }
+
         } else {
             ResetAttackBlockParams();
         }
+            
 
         if (TKCooldown > 0) {
             TKCooldown -= Time.deltaTime;
@@ -1282,8 +1345,9 @@ public class PlayerLocomotion : MonoBehaviour
             hasSwitchedWeapon = false;
         }
 
-        armsStateConceal.localRotation = Quaternion.Lerp(armsStateConceal.localRotation, 
-            concealState ? armsStateConceal.parent.GetChild(2).localRotation : armsStateConceal.parent.GetChild(1).localRotation, Time.deltaTime * 12f);
+        bool fullConceal = atkSubstate == 4 || concealState;
+        armsStateConceal.localRotation = Quaternion.Lerp(armsStateConceal.localRotation,
+            fullConceal ? armsStateConceal.parent.GetChild(2).localRotation : armsStateConceal.parent.GetChild(1).localRotation, Time.deltaTime * 12f);
 
         armsConceal.localEulerAngles = new Vector3(weaponSwitchCurve.Evaluate(weaponSwitchTime) * 50, 0, weaponSwitchCurve.Evaluate(weaponSwitchTime) * -25);
         armsConceal.localPosition = new Vector3(0, weaponSwitchCurve.Evaluate(weaponSwitchTime) * -1, 0);
@@ -1307,7 +1371,7 @@ public class PlayerLocomotion : MonoBehaviour
 
 
         //slideVector = new Vector3(0, -9.8f, 0);
-
+        /*
         if (currentState == PlayerState.Sliding)
             cc.height = Mathf.Lerp(cc.height, 0.51f, Time.deltaTime * 9f);
         else {
@@ -1315,6 +1379,7 @@ public class PlayerLocomotion : MonoBehaviour
             if (cc.height < 1.99f)
                 cc.Move(new Vector3(0, 10.2f, 0.01f) * Time.deltaTime);
         }
+        */
 
             if (keyboardOrGamepad) {
             //GAMEPAD
@@ -1610,6 +1675,14 @@ public class PlayerLocomotion : MonoBehaviour
         //Debug.Log(currentArmsState);
     }
 
+    void ChangeLegsAnimationState(string newState, float transitionTime) {
+        if (currentLegsState == newState) return;
+
+        //armsAnim.Play(newState);
+        legsAnim.CrossFadeInFixedTime(newState, transitionTime, 0);
+        currentLegsState = newState;
+    }
+
     private void LateUpdate() {
         lastFrameInputDir = Inputs.inputDirRaw;
         lastFrameLook = Inputs.look;
@@ -1672,7 +1745,7 @@ public class PlayerLocomotion : MonoBehaviour
         isReleasingMagic = false;
         magicChargeTime = 0;
         magicReleaseTime = 0;
-        releaseMagicAction = false;
+        releaseMagicAction = true;//false
         currentReleaseMagicActionTime = 0f;
 
         BowString.bowDrawn = false;
@@ -1685,6 +1758,12 @@ public class PlayerLocomotion : MonoBehaviour
 
         TKCooldown = 0.3f;
         ChangeArmsAnimationState("LeftHandEmpty", 0.2f, 1);
+        ChangeLegsAnimationState("Idle", 0.2f);
+
+        kickChargeTime = 0;
+        kickReleaseTime = 0;
+        isKicking = false;
+        releasedKickAction = true;
     }
 
     private void OnTriggerEnter(Collider col) {

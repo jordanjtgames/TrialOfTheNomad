@@ -12,8 +12,11 @@ public class PlayerLook : MonoBehaviour
     public float mouseSensitivity = 100f;
 
     public Transform playerBody;
+    public Transform wallrunLook;
 
     float xRotation = 0f;
+
+    public bool isWallrunning = false;
 
     // Start is called before the first frame update
     void Start() {
@@ -54,6 +57,11 @@ public class PlayerLook : MonoBehaviour
 
         transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
-        playerBody.Rotate(Vector3.up * mouseX);
+        if (!isWallrunning) {
+            playerBody.Rotate(Vector3.up * mouseX);
+        } else {
+            wallrunLook.Rotate(Vector3.up * mouseX);
+        }
+        
     }
 }

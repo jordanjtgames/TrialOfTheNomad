@@ -34,8 +34,6 @@ class WalkState : CharacterState
             return new FallingState();
         }
 
-
-
         if(pl.atkSubstate >= 2) {
             //Attack Animations
         } else {
@@ -53,6 +51,10 @@ class WalkState : CharacterState
             }
         }
 
+        if(Inputs.sprintHeld && Inputs.slidePressed) {
+            return new SlideState();
+        }
+
         return this;
     }
 }
@@ -63,6 +65,7 @@ class FallingState : CharacterState
         pl.controlState = true;
         pl.attackState = true;
         pl.concealState = false;
+        pl.currentState = PlayerLocomotion.PlayerState.Falling;
 
         if (pl.cc.isGrounded && pl.jumpDelay <= 0f) {
             pl.hasJumped = false;
@@ -94,8 +97,49 @@ class FallingState : CharacterState
             }
         }
 
+        float wallrunDist = 1f;
+        RaycastHit WR_LH;
+        RaycastHit WR_RH;
+
+        bool canWR = 
+            Vector3.Distance(new Vector3(pl.wallrunDismountPos.x, 0, pl.wallrunDismountPos.z), new Vector3(pl.transform.position.x, 0, pl.transform.position.z)) > 5f
+            && !pl.isCrouched && Inputs.inputDirRaw != Vector2.zero;
+        float angleDist = 0.8f;
+
+        if (Physics.Raycast(pl.wallrunCheck.position, pl.wallrunCheck.TransformDirection(Vector3.right), out WR_RH, wallrunDist, pl.WR_LayerMask) && pl.R_wallrunDelay <= 0) {
+            //Wallrun Right
+            pl.wallrunLeft = false;
+            //pl.wallrunPos.position = pl.transform.position;
+            pl.wallrunPos.position = WR_RH.point + WR_RH.normal * 0.5f;
+            pl.wallrunPos.rotation = Quaternion.LookRotation(WR_RH.normal);
+            pl.wallrunDir = pl.wallrunPos.GetChild(1).position - pl.wallrunPos.GetChild(0).position;
+            pl.wallrunEnterVel = pl.cc.velocity;
+
+            bool WRAngle = Vector3.Distance(pl.wallrunPos.GetChild(1).position, pl.wallrunPos.GetChild(0).position + pl.transform.TransformDirection(Vector3.forward)) < angleDist;
+            if (canWR && WRAngle) {
+                return new WallrunState();
+            }
+            
+        } else if (Physics.Raycast(pl.wallrunCheck.position, pl.wallrunCheck.TransformDirection(Vector3.left), out WR_LH, wallrunDist, pl.WR_LayerMask) && pl.L_wallrunDelay <= 0) {
+            //Wallrun Left
+            pl.wallrunLeft = true;
+            //pl.wallrunPos.position = pl.transform.position;
+            pl.wallrunPos.position = WR_LH.point + WR_LH.normal * 0.5f;
+            pl.wallrunPos.rotation = Quaternion.LookRotation(WR_LH.normal);
+            pl.wallrunDir = pl.wallrunPos.GetChild(2).position - pl.wallrunPos.GetChild(0).position;
+            pl.wallrunEnterVel = pl.cc.velocity;
+
+            bool WRAngle = Vector3.Distance(pl.wallrunPos.GetChild(2).position, pl.wallrunPos.GetChild(0).position + pl.transform.TransformDirection(Vector3.forward)) < angleDist;
+            if (canWR && WRAngle) {
+                return new WallrunState();
+            }
+        }
+
         if (pl.ringTrigger) {
             return new RingState();
+        }
+        if (pl.poleTrigger) {
+            return new PoleJumpState();
         }
 
         return this;
@@ -108,20 +152,29 @@ class RingState : CharacterState
         pl.controlState = false;
         pl.attackState = false;
         pl.concealState = true;
+        pl.currentState = PlayerLocomotion.PlayerState.RingGrab;
 
         pl.hasJumped = false;
         pl.extraVel = Vector3.zero;
+        pl.extraDampenVel = Vector3.zero;
+        pl.ChangeArmsAnimationState("Idle", 0.2f, 0);
 
         pl.transform.position = Vector3.Lerp(pl.transform.position, pl.ringTrans.position, Time.deltaTime * 7f);
 
         if (Inputs.jumpPressed) {
             pl.ringTrigger = false;
-            pl.extraDampenVel = pl.transform.TransformDirection(new Vector3(0,2,0.4f) * 11f);
+            pl.extraDampenVel = pl.transform.TransformDirection(new Vector3(0,2,0.4f) * 14f);//11f
+            pl.hasJumped = true;
+            pl.leap = true;
+            pl.R_wallrunDelay = 0.8f;
+            pl.L_wallrunDelay = 0.8f;
             return new FallingState();
         }
         if (Inputs.crouchPressed) {
             pl.ringTrigger = false;
             pl.extraDampenVel = Vector3.zero;
+            pl.R_wallrunDelay = 0.8f;
+            pl.L_wallrunDelay = 0.8f;
             return new FallingState();
         }
 
@@ -160,11 +213,14 @@ class LedgeScaleState : CharacterState
         pl.controlState = false;
         pl.attackState = false;
         pl.concealState = true;
+        pl.currentState = PlayerLocomotion.PlayerState.LedgeGrab;
 
         pl.hasJumped = false;
+        pl.airTime = 0;
         pl.extraVel = Vector3.zero;
+        pl.extraDampenVel = Vector3.zero;
 
-        if(dir == Vector3.zero) {
+        if (dir == Vector3.zero) {
             dir = (new Vector3(pl.ledgeGrabHit.x,0, pl.ledgeGrabHit.z) - new Vector3(pl.transform.position.x, 0, pl.transform.position.z)).normalized;
         }
 
@@ -194,6 +250,37 @@ class PoleJumpState : CharacterState
         pl.controlState = false;
         pl.attackState = true;
         pl.concealState = false;
+        pl.currentState = PlayerLocomotion.PlayerState.PoleBalancing;
+
+        pl.hasJumped = false;
+        pl.leap = false;
+        pl.airTime = 0;
+        pl.extraVel = Vector3.zero;
+        pl.extraDampenVel = Vector3.zero;
+
+        pl.transform.position = Vector3.Lerp(pl.transform.position, pl.poleTrans.position, Time.deltaTime * 10f);//7f
+
+        if (Inputs.jumpPressed) {
+            pl.poleTrigger = false;
+            pl.extraDampenVel = pl.transform.TransformDirection(new Vector3(0, 2, 0.4f) * 14f);//11f
+            pl.hasJumped = true;
+            if (Inputs.inputDirRaw.y > 0.1f)
+                pl.leap = true;
+            return new FallingState();
+        }
+        /*
+        if (Inputs.crouchPressed) {
+            pl.poleTrigger = false;
+            pl.extraDampenVel = Vector3.zero;
+            return new FallingState();
+        }
+        */
+        if (pl.atkSubstate >= 2) {
+            //Attack Animations
+        } else {
+            pl.ChangeArmsAnimationState("RopeBalance", 0.2f, 0);
+        }
+
         return this;
     }
 }
@@ -210,11 +297,125 @@ class RopeBalanceState : CharacterState
 
 class WallrunState : CharacterState
 {
+    bool hasSetVel = false;
+    float yVel = 0;
+    float fallVel = 0;
+    float wallrunTime = 0;
+
     override public CharacterState handelInput() {
         pl.controlState = false;
-        pl.attackState = true;
+        pl.attackState = false;
         pl.concealState = true;
+        pl.ChangeArmsAnimationState("Idle", 0.2f, 0);
+
+        pl.hasJumped = false;
+        pl.leap = false;
+        pl.airTime = 0;
+        pl.extraVel = Vector3.zero;
+        pl.extraDampenVel = Vector3.zero;
+
+        pl.plook.isWallrunning = true;
+
+        if (!hasSetVel) {
+            yVel = pl.wallrunEnterVel.y;
+            Debug.Log(yVel);
+            hasSetVel = true;
+        } else {
+            yVel = Mathf.Lerp(yVel, 0, Time.deltaTime * 4f);
+        }
+        wallrunTime += Time.deltaTime;
+
+
+        if (fallVel > -30)
+            fallVel -= Time.deltaTime * 6.25f;
+
+        float wallrunDist = 1f;
+        RaycastHit WR_LH;
+        RaycastHit WR_RH;
+
+        Vector3 exitVel = (pl.wallrunDir + (Vector3.up * (fallVel + yVel) * 0.15f)) * 6f;
+        if (pl.wallrunLeft) {
+            if (Physics.Raycast(pl.wallrunCheck.position, pl.wallrunPos.GetChild(0).TransformDirection(Vector3.forward), out WR_LH, wallrunDist, pl.WR_LayerMask)) {
+                //Wallrun Left
+                pl.wallrunPos.rotation = Quaternion.LookRotation(WR_LH.normal);
+                pl.wallrunPos.position = pl.transform.position;
+                pl.rotateOverTimeVal = Vector3.Angle(pl.wallrunDir, pl.wallrunPos.GetChild(2).position - pl.wallrunPos.GetChild(0).position);
+                pl.wallrunDir = pl.wallrunPos.GetChild(2).position - pl.wallrunPos.GetChild(0).position;
+            } else {
+                pl.extraDampenVel = exitVel;
+                pl.L_wallrunDelay = 0.8f;
+                pl.R_wallrunDelay = 0.4f;
+                pl.wallrunDismountPos = pl.transform.position;
+                pl.hasJumped = true;
+                pl.leap = false;
+                ResetLook();
+                return new FallingState();
+            }
+        } else {
+            if (Physics.Raycast(pl.wallrunCheck.position, pl.wallrunPos.GetChild(0).TransformDirection(Vector3.forward), out WR_RH, wallrunDist, pl.WR_LayerMask)) {
+                //Wallrun Right
+                pl.wallrunPos.rotation = Quaternion.LookRotation(WR_RH.normal);
+                pl.wallrunPos.position = pl.transform.position;
+                pl.rotateOverTimeVal = Vector3.Angle(pl.wallrunDir, pl.wallrunPos.GetChild(2).position - pl.wallrunPos.GetChild(0).position);   
+                pl.wallrunDir = pl.wallrunPos.GetChild(1).position - pl.wallrunPos.GetChild(0).position;
+            } else {
+                pl.extraDampenVel = exitVel;
+                pl.R_wallrunDelay = 0.8f;
+                pl.L_wallrunDelay = 0.4f;
+                pl.wallrunDismountPos = pl.transform.position;
+                pl.hasJumped = true;
+                pl.leap = false;
+                ResetLook();
+                return new FallingState();
+            }
+        }
+
+        if (Inputs.jumpPressed) {
+            Vector3 jumpVel = pl.wallrunPos.GetChild(0).TransformDirection(new Vector3(0, 0.8f, -1.5f)) * 5.3f;
+            pl.extraDampenVel = pl.transform.TransformDirection(new Vector3(0, 1.19f, 0.4f) * 14f) + jumpVel;//11f
+            pl.hasJumped = true;
+            pl.leap = true;
+            if (pl.wallrunLeft) {
+                pl.L_wallrunDelay = 0.8f;
+                pl.R_wallrunDelay = 0.4f;
+            } else {
+                pl.R_wallrunDelay = 0.8f;
+                pl.L_wallrunDelay = 0.4f;
+            }
+            pl.wallrunDismountPos = pl.transform.position;
+            ResetLook();
+            return new FallingState();
+        }
+
+        if (Inputs.crouchReleased) {
+            pl.extraDampenVel = exitVel;
+            if (pl.wallrunLeft) {
+                pl.L_wallrunDelay = 0.8f;
+                pl.R_wallrunDelay = 0.4f;
+            } else {
+                pl.R_wallrunDelay = 0.8f;
+                pl.L_wallrunDelay = 0.4f;
+            }
+            pl.wallrunDismountPos = pl.transform.position;
+            ResetLook();
+            return new FallingState();
+        }
+
+        //Vector3 correction = pl.wallrunPos.GetChild(0).position - pl.transform.position;
+        Vector3 correction = Vector3.zero;
+        pl.cc.Move((pl.wallrunDir * Time.deltaTime * 12f) + (new Vector3(0,yVel + fallVel, 0) * Time.deltaTime) + (correction * Time.deltaTime));
+        if(pl.wallrunLeft)
+            pl.transform.rotation = Quaternion.Lerp(pl.transform.rotation, pl.wallrunPos.GetChild(2).rotation, Time.deltaTime * 7f);
+        else
+            pl.transform.rotation = Quaternion.Lerp(pl.transform.rotation, pl.wallrunPos.GetChild(1).rotation, Time.deltaTime * 7f);
+
         return this;
+    }
+
+    public void ResetLook() {
+        pl.transform.rotation = pl.plook.wallrunLook.rotation;
+        pl.plook.wallrunLook.localEulerAngles = Vector3.zero;
+        pl.plook.isWallrunning = false;
     }
 }
 
@@ -513,6 +714,38 @@ class BlockingState : CharacterState
     }
 }
 
+class SlideState : CharacterState
+{
+    bool setSlideDir = false;
+    Vector3 slideEnterVel;
+
+    override public CharacterState handelInput() {
+        pl.controlState = false;
+        pl.attackState = true;
+        pl.concealState = false;
+        pl.currentState = PlayerLocomotion.PlayerState.Sliding;
+
+        if (!setSlideDir) {
+            slideEnterVel = new Vector3(pl.cc.velocity.x, 0, pl.cc.velocity.z);
+            setSlideDir = true;
+        }
+
+        if(pl.atkSubstate >= 2) {
+            
+        } else {
+            pl.ChangeArmsAnimationState("Slide", 0.2f, 0);
+        }
+
+        pl.cc.Move((slideEnterVel * Time.deltaTime * 1f) + (Vector3.down * Time.deltaTime * 9.8f));
+
+        if (Inputs.jumpHeld) {
+            return new WalkState();
+        }
+
+        return this;
+    }
+}
+
 class SlidingState : CharacterState
 {
     float slideTime = 10f;
@@ -580,6 +813,10 @@ class SlidingState : CharacterState
             return new WalkState();
         }
 
+        if (Inputs.jumpHeld) {
+            slideTime = 0;
+        }
+
         pl.ChangeArmsAnimationState("Slide", 0.2f, 0);
 
         return this;
@@ -618,6 +855,8 @@ public class PlayerLocomotion : MonoBehaviour
 
 
     [Header("Misc Variables")]
+    public Transform playerParent;
+    public PlayerLook plook;
     float speedMod = 1f;
     public Camera cam;
     public UIManager uiMan;
@@ -656,7 +895,7 @@ public class PlayerLocomotion : MonoBehaviour
 
     public float airTime = 0;
 
-    bool isCrouched = false;
+    public bool isCrouched = false;
 
     float weaponSwitchTime = 0;
     public AnimationCurve weaponSwitchCurve;
@@ -687,9 +926,14 @@ public class PlayerLocomotion : MonoBehaviour
         Idle, //or magic
         Walking,
         Sprinting,
+        Falling,
         Attacking,
         Blocking,
         Sliding,
+        PoleBalancing,
+        RopeBalancing,
+        RingGrab,
+        LedgeGrab,
     }
     public PlayerState currentState;
     public Holding newWeapon = Holding.Shortsword;
@@ -789,8 +1033,21 @@ public class PlayerLocomotion : MonoBehaviour
     public Transform ledgeGrabTop;
     public Vector3 ledgeGrabHit;
 
+    public Transform wallrunCheck;
+    public Transform wallrunPos;
+    public bool wallrunLeft = false;
+    public Vector3 wallrunDir;
+    public float rotateOverTimeVal = 0;
+    public Vector3 wallrunEnterVel;
+    public float L_wallrunDelay = 0;
+    public float R_wallrunDelay = 0;
+    public Vector3 wallrunDismountPos;
+    public LayerMask WR_LayerMask;
+
     public bool ringTrigger = false;
+    public bool poleTrigger = false;
     public Transform ringTrans;
+    public Transform poleTrans;
 
     void Start()
     {
@@ -823,6 +1080,7 @@ public class PlayerLocomotion : MonoBehaviour
     void Update() {
         state.pl = this;
         state = state.handelInput();
+        bool atkGrounded = cc.isGrounded || currentState == PlayerState.PoleBalancing || currentState == PlayerState.RopeBalancing;
 
         float movementSlopeAngle = Mathf.Asin(cc.velocity.normalized.y) * Mathf.Rad2Deg;
         float maxSpeed = cc.isGrounded ? slopeSpeedMultiplier.Evaluate(movementSlopeAngle) : 1f;
@@ -849,7 +1107,7 @@ public class PlayerLocomotion : MonoBehaviour
         else
             jumpDelay = 0f;
 
-        if (cc.isGrounded && !hasJumped) {
+        if (atkGrounded && !hasJumped) {//cc
             extraVel.y = gravity * 0.25f;
             airTime = 0f;
         } else {
@@ -861,8 +1119,10 @@ public class PlayerLocomotion : MonoBehaviour
         }
 
         extraDampenVel = Vector3.Lerp(extraDampenVel, Vector3.zero, Time.deltaTime * 2.4f);
+        if (extraDampenVel.magnitude < 1.51f)
+            extraDampenVel = Vector3.zero;
+        
 
-        //Debug.Log(extraVel.y);
         Vector3 uncrouchPush = transform.TransformDirection(Vector3.forward * (1 - (cc.height-1))) * (!isCrouched && cc.height < 1.95f ? 1 : 0);
         Vector3 finalVel = extraVel + extraDampenVel + uncrouchPush;
         if (controlState) {
@@ -875,13 +1135,29 @@ public class PlayerLocomotion : MonoBehaviour
             ringTrigger = false;
         }
 
-        isCrouched = Inputs.crouchHeld;
-        cc.height = Mathf.Lerp(cc.height, isCrouched ? 0.5f : 2f, Time.deltaTime * 6.3f);
+        if (rotateOverTimeVal > 0f) {
+            //transform.Rotate(Vector3.up * rotateOverTimeVal * (wallrunLeft ? 1 : -1f) * Time.deltaTime);
+            //rotateOverTimeVal -= Time.deltaTime;
+        }
+        //Debug.Log(rotateOverTimeVal);
+
+        if (L_wallrunDelay > 0)
+            L_wallrunDelay -= Time.deltaTime;
+        if (R_wallrunDelay > 0)
+            R_wallrunDelay -= Time.deltaTime;
+        if (L_wallrunDelay <= 0 && R_wallrunDelay <= 0)
+            wallrunDismountPos = Vector3.zero;
+
+        isCrouched = Inputs.crouchHeld && currentState != PlayerState.Sprinting;
+        bool halfHeight = isCrouched || currentState == PlayerState.Sliding;
+        cc.height = Mathf.Lerp(cc.height, halfHeight ? 0.5f : 2f, Time.deltaTime * 6.3f);
 
         bool halfConceal = isCrouched;
         armsStateConceal.localPosition = Vector3.Lerp(armsStateConceal.localPosition,
             halfConceal ? armsStateConceal.parent.GetChild(2).localPosition : armsStateConceal.parent.GetChild(1).localPosition, Time.deltaTime * 12f);
 
+        armsAnim.SetFloat("WalkSpeed", isCrouched ? 0.65f : 1f);
+        handAnim.SetFloat("WalkSpeed", isCrouched ? 0.65f : 1f);
 
         //Interact
         RaycastHit iHit;
@@ -1048,7 +1324,7 @@ public class PlayerLocomotion : MonoBehaviour
                                         //Debug.Log(hit.collider.gameObject.name);
                                         hitSlam.collider.SendMessage("OnAttackHit", SendMessageOptions.DontRequireReceiver);
                                     }
-                                    CamShake.instance.Shake(0.202f,0.2f);
+                                    CamShake.instance.Shake(0.102f,0.2f);//0.202
                                 }
                             }
                             if (currentWeapon == Holding.Broadsword) {
@@ -1256,13 +1532,13 @@ public class PlayerLocomotion : MonoBehaviour
                 ChangeLegsAnimationState("KickRelease", 0.02f);
                 if (releasedKickAction && kickReleaseTime > 0.1f) {
 
-                    RaycastHit[] allKickHits = Physics.SphereCastAll(cam.transform.position, 1.65f, cam.transform.TransformDirection(Vector3.forward), 1.3f);
+                    RaycastHit[] allKickHits = Physics.SphereCastAll(cam.transform.position, 1.15f, cam.transform.TransformDirection(Vector3.forward), 1.3f);
 
                     foreach (RaycastHit kickHit in allKickHits) {
                         //Debug.Log(hit.collider.gameObject.name);
                         kickHit.collider.SendMessage("OnAttackHit", SendMessageOptions.DontRequireReceiver);
                     }
-                    CamShake.instance.Shake(0.03f, 0.037f);
+                    CamShake.instance.Shake(0.05f, 1f);
 
                     releasedKickAction = false;
                 }
@@ -1562,6 +1838,7 @@ public class PlayerLocomotion : MonoBehaviour
 
         armsAnim.SetFloat("ChargeSpeed", chargeSpeed);
         armsAnim.SetFloat("ReleaseSpeed", releaseSpeed);
+        
         handAnim.SetFloat("ChargeSpeed", chargeSpeed);
         handAnim.SetFloat("ReleaseSpeed", releaseSpeed);
 
@@ -1771,6 +2048,11 @@ public class PlayerLocomotion : MonoBehaviour
             //Debug.LogError("Ring");
             ringTrigger = true;
             ringTrans = col.transform;
+        }
+        if (col.tag == "Pole") {
+            //Debug.LogError("Ring");
+            poleTrigger = true;
+            poleTrans = col.transform;
         }
     }
 }

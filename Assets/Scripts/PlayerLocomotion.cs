@@ -103,8 +103,8 @@ class FallingState : CharacterState
 
         bool canWR = 
             Vector3.Distance(new Vector3(pl.wallrunDismountPos.x, 0, pl.wallrunDismountPos.z), new Vector3(pl.transform.position.x, 0, pl.transform.position.z)) > 5f
-            && !pl.isCrouched && Inputs.inputDirRaw != Vector2.zero;
-        float angleDist = 0.8f;
+            && !pl.isCrouched && Inputs.inputDirRaw != Vector2.zero && Inputs.inputDirRaw.y > 0.1f;
+        float angleDist = 0.6f;//0.8f
 
         if (Physics.Raycast(pl.wallrunCheck.position, pl.wallrunCheck.TransformDirection(Vector3.right), out WR_RH, wallrunDist, pl.WR_LayerMask) && pl.R_wallrunDelay <= 0) {
             //Wallrun Right
@@ -148,6 +148,11 @@ class FallingState : CharacterState
 
 class RingState : CharacterState
 {
+    bool exitJump = false;
+    float exitJumpTime = 0f;
+    Vector3 anticipation;
+    bool jumpFinished = false;
+
     override public CharacterState handelInput() {
         pl.controlState = false;
         pl.attackState = false;
@@ -159,9 +164,20 @@ class RingState : CharacterState
         pl.extraDampenVel = Vector3.zero;
         pl.ChangeArmsAnimationState("Idle", 0.2f, 0);
 
-        pl.transform.position = Vector3.Lerp(pl.transform.position, pl.ringTrans.position, Time.deltaTime * 7f);
+        pl.transform.position = Vector3.Lerp(pl.transform.position, pl.ringTrans.position + anticipation, Time.deltaTime * 7f);
 
         if (Inputs.jumpPressed) {
+            exitJump = true;
+        }
+        if (exitJump) {
+            exitJumpTime += Time.deltaTime;
+            anticipation = new Vector3(0, -exitJumpTime * 17f, 0);
+            if (exitJumpTime > 0.072f) {
+                jumpFinished = true;
+            }
+        }
+
+        if (jumpFinished) { //Inputs.jumpPressed
             pl.ringTrigger = false;
             pl.extraDampenVel = pl.transform.TransformDirection(new Vector3(0,2,0.4f) * 14f);//11f
             pl.hasJumped = true;
@@ -719,6 +735,15 @@ class SlideState : CharacterState
     bool setSlideDir = false;
     Vector3 slideEnterVel;
 
+    Vector2 slideInputDir;
+    Vector3 groundPos;
+
+    float slideSpeed = 20f;//10f
+
+    float slopeMod = 0f;
+
+    bool slideGrounded = true;
+
     override public CharacterState handelInput() {
         pl.controlState = false;
         pl.attackState = true;
@@ -736,10 +761,35 @@ class SlideState : CharacterState
             pl.ChangeArmsAnimationState("Slide", 0.2f, 0);
         }
 
-        pl.cc.Move((slideEnterVel * Time.deltaTime * 1f) + (Vector3.down * Time.deltaTime * 9.8f));
+        RaycastHit groundHit;
+        if (Physics.Raycast(pl.transform.position + Vector3.up, Vector3.down, out groundHit, 1.15f)) {
+            groundPos = groundHit.point;
+            slideGrounded = true;
+        } else {
+            slideGrounded = false;
+        }
+
+        RaycastHit slideHit;
+        if (Physics.Raycast(pl.transform.position + pl.transform.TransformDirection(new Vector3(0,1f,1f)), Vector3.down, out slideHit, 3.5f)) {
+            slopeMod = groundPos.y - slideHit.point.y;      
+        }
+
+        slideInputDir = Vector2.Lerp(slideInputDir, Inputs.inputDirRaw, Time.deltaTime * 6f);
+
+        //pl.cc.Move((slideEnterVel * Time.deltaTime * 1f) + (Vector3.down * Time.deltaTime * 9.8f));
+        pl.cc.Move(pl.transform.TransformDirection(Vector3.forward * Time.deltaTime * slideSpeed) + (Vector3.down * Time.deltaTime * 9.8f));
+        pl.transform.Rotate(new Vector3(0, slideInputDir.x * Time.deltaTime * 34f,0));
+
+        if (slideSpeed > 0f) {
+            float accel = (11f + ((slopeMod * -45f) * (slideGrounded ? 1 : 0)));
+            slideSpeed -= Time.deltaTime * accel;//25f
+        }
+        if(slideSpeed <= 1f) {
+            return new FallingState();
+        }
 
         if (Inputs.jumpHeld) {
-            return new WalkState();
+            return new FallingState();
         }
 
         return this;
